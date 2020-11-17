@@ -26,6 +26,7 @@ type readOnly struct {
 
 // expunged是用来标识此项已经删掉的指针
 // 当map中的一个项目被删除了，只是把它的值标记为expunged，以后才有机会真正删除此项
+// nil和expunged都代表元素被删除了，只不过expunged比较特殊，如果被删除的元素是expunged,代表它只存在于readonly之中，不存在于dirty中。这样如果重新设置这个key的话，需要往dirty增加key
 var expunged = unsafe.Pointer(new(interface{}))
 
 // entry代表一个值
@@ -43,15 +44,16 @@ func (m *Map) Store(key, value interface{}) {
 	// read中不存在，或者cas更新失败，就需要加锁访问dirty了
 	m.mu.Lock()
 	read, _ = m.read.Load().(readOnly)
-	if e, ok := read.m[key]; ok { // 双检查，看看read是否已经存在了
+	if e, ok := read.m[key]; ok { // 双检查，1.看看read是否已经存在了
+		// 如果entry被标记expunge，则表明dirty没有key，可添加入dirty，并更新entry。
 		if e.unexpungeLocked() {
 			// 此项目先前已经被删除了，通过将它的值设置为nil，标记为unexpunged
 			m.dirty[key] = e
 		}
 		e.storeLocked(&value) // 更新
-	} else if e, ok := m.dirty[key]; ok { // 如果dirty中有此项
+	} else if e, ok := m.dirty[key]; ok { // 2.如果dirty中有此项
 		e.storeLocked(&value) // 直接更新
-	} else { // 否则就是一个新的key
+	} else { // 3.否则就是一个新的key
 		if !read.amended { //如果dirty为nil
 			// 需要创建dirty对象，并且标记read的amended为true,
 			// 说明有元素它不包含而dirty包含
@@ -63,6 +65,11 @@ func (m *Map) Store(key, value interface{}) {
 	m.mu.Unlock()
 }
 
+func (e *entry) unexpungeLocked() (wasExpunged bool) {
+	return atomic.CompareAndSwapPointer(&e.p, expunged, nil)
+}
+
+// 将read中未删除的数据加入到dirty中
 func (m *Map) dirtyLocked() {
 	if m.dirty != nil { // 如果dirty字段已经存在，不需要创建了
 		return
@@ -71,6 +78,7 @@ func (m *Map) dirtyLocked() {
 	read, _ := m.read.Load().(readOnly) // 获取read字段
 	m.dirty = make(map[interface{}]*entry, len(read.m))
 	for k, e := range read.m { // 遍历read字段
+		// 通过此次操作，dirty中的元素都是未被删除的，可见标记为expunged的元素不在dirty中！！！
 		if !e.tryExpungeLocked() { // 把非punged的键值对复制到dirty中
 			m.dirty[k] = e
 		}
@@ -133,6 +141,8 @@ func (m *Map) LoadAndDelete(key interface{}) (value interface{}, loaded bool) {
 		m.mu.Unlock()
 	}
 	if ok {
+		//为什么dirty是直接删除，而read是标记删除
+		//read的作用是在dirty前头优先度，遇到相同元素的时候为了不穿透到dirty，所以采用标记的方式。 同时正是因为这样的机制+amended的标记，可以保证read找不到&&amended=false的时候，dirty中肯定找不到
 		return e.delete() // 如果read中存在该key，则将该value 赋值nil（采用标记的方式删除！）
 	}
 	return nil, false
