@@ -54,21 +54,27 @@ func TestTaskScheduling(t *testing.T) {
 	select {}
 }
 
-func TestTaskScheduling(t *testing.T) {
+// 优秀代码
+type Token struct{}
 
-	ch := make(chan struct{})
-	for i := 1; i <= 4; i++ {
-		go func(index int) {
-			time.Sleep(time.Duration(index*10) * time.Millisecond) //核心用时间控制顺序，不推荐
-			for {
-				<-ch
-				fmt.Printf("I am No %d Goroutine\n", index)
-				time.Sleep(time.Second)
-				ch <- struct{}{}
-			}
-		}(i)
+func newWorker(id int, ch chan Token, nextCh chan Token) {
+	for {
+		token := <-ch         // 取得令牌
+		fmt.Println((id + 1)) // id从1开始
+		time.Sleep(time.Second)
+		nextCh <- token //向下一个chan 传递令牌
 	}
-	ch <- struct{}{}
-	time.Sleep(time.Minute)
+}
+func TestDataTransfer(t *testing.T) {
+	chs := []chan Token{make(chan Token), make(chan Token), make(chan Token), make(chan Token)}
 
+	// 创建4个worker
+	for i := 0; i < 4; i++ {
+		go newWorker(i, chs[i], chs[(i+1)%4])
+	}
+
+	//首先把令牌交给第一个worker
+	chs[0] <- struct{}{}
+
+	select {}
 }
