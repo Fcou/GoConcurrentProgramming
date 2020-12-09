@@ -34,7 +34,7 @@ func (m *Mutex) Lock() {
 }
 
 func (m *Mutex) lockSlow() {
-	var waitStartTime int64 //记录此 goroutine 请求锁的初始时间
+	var waitStartTime int64 // 记录此 goroutine 请求锁的初始时间
 	starving := false       // 此goroutine的饥饿标记
 	awoke := false          // 唤醒标记
 	iter := 0               // 自旋次数
@@ -51,6 +51,7 @@ func (m *Mutex) lockSlow() {
 			old = m.state // 再次获取锁的状态，之后会检查是否锁被释放了
 			continue
 		}
+
 		new := old
 		if old&mutexStarving == 0 {
 			new |= mutexLocked // 非饥饿状态，加锁

@@ -14,7 +14,7 @@ func TestContextWithValue(t *testing.T) {
 	ctx = context.WithValue(ctx, "key1", "0001")
 	ctx = context.WithValue(ctx, "key2", "0001")
 	ctx = context.WithValue(ctx, "key3", "0001")
-	ctx = context.WithValue(ctx, "key4", "0004")
+	ctx = context.WithValue(ctx, "key1", "0004")
 
 	fmt.Println(ctx.Value("key1"))
 }
@@ -84,8 +84,9 @@ func TestContexCancle(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		<-pctx.Done()
-		fmt.Println("done")
+		<-cctx.Done()
+		time.Sleep(time.Second * 1)
+		fmt.Println("cctx done")
 
 		if cctx.Value("key1") == "0001" {
 			fmt.Println("OKK")
@@ -96,7 +97,7 @@ func TestContexCancle(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 	cancel()
-	fmt.Println("timeout")
+	fmt.Println("pctx cancel")
 
 	wg.Wait()
 }
