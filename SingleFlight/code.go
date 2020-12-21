@@ -91,14 +91,14 @@ func (g *Group) Do(key string, fn func() (interface{}, error)) (v interface{}, e
 	if c, ok := g.m[key]; ok {
 		c.dups++
 		g.mu.Unlock()
-		c.wg.Wait()
+		c.wg.Wait()  //当第一个fn执行完毕后，Down()后，则所有fn不再阻塞
 
 		if e, ok := c.err.(*panicError); ok {
 			panic(e)
 		} else if c.err == errGoexit {
 			runtime.Goexit()
 		}
-		return c.val, c.err, true
+		return c.val, c.err, true // 第一个fn执行完毕，缓存返回值和err，其他进程都能拿到
 	}
 	c := new(call)
 	c.wg.Add(1)
